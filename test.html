@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>웹캠 얼굴형 분석</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+      body {
+        text-align: center;
+        font-family: Arial, sans-serif;
+      }
+      video {
+        border: 2px solid black;
+        margin: 20px;
+      }
+      #result {
+        font-size: 20px;
+        font-weight: bold;
+        margin-top: 10px;
+      }
+      #probabilities {
+        margin-top: 10px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Teachable Machine 얼굴형 분석</h1>
+    <video id="webcam" autoplay playsinline width="300" height="300"></video>
+    <p id="result">분석 중...</p>
+    <p id="probabilities"></p>
+
+    <script>
+      let model;
+      let webcamElement = document.getElementById("webcam");
+
+      // 얼굴형 클래스 (Teachable Machine에서 학습한 순서대로 설정)
+      const faceShapes = ["둥근형", "각진형", "긴 얼굴형", "하트형", "계란형"];
+
+      // 1️⃣ 모델 로드
+      async function loadModel() {
+        model = await tf.loadLayersModel("model.json"); // 모델 경로 설정
+        console.log("✅ 모델 로드 완료!");
+      }
+
+      // 2️⃣ 웹캠 활성화
+      async function setupWebcam() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        webcamElement.srcObject = stream;
+        console.log("🎥 웹캠 시작!");
+      }
+
+      // 3️⃣ 실시간 예측 함수
+      async function predict() {
+        if (!model) {
+          document.getElementById("result").innerText = "⏳ 모델 로딩 중...";
+          return;
+        }
+
+        // 웹캠에서 이미지 캡처하여 모델 입력 형태로 변환
+        const videoTensor = tf.browser
+          .fromPixels(webcamElement)
+          .resizeNearestNeighbor([224, 224]) // 모델 입력 크기에 맞추기
+          .toFloat()
+          .expandDims(0); // 배치 차원 추가
+
+        const prediction = model.predict(videoTensor);
+        const resultArray = await prediction.data(); // 예측된 확률 값 가져오기
+
+        // 가장 높은 확률을 가진 인덱스 찾기
+        const maxIndex = resultArray.indexOf(Math.max(...resultArray));
+        const predictedShape = faceShapes[maxIndex]; // 예측된 얼굴형
+
+        // 각 얼굴형의 확률을 백분율(%)로 변환
+        let probabilitiesText = "";
+        resultArray.forEach((prob, index) => {
+          probabilitiesText += `${faceShapes[index]}: ${(prob * 100).toFixed(
+            2
+          )}%<br>`;
+        });
+
+        // 결과 출력
+        document.getElementById(
+          "result"
+        ).innerText = `예측된 얼굴형: ${predictedShape}`;
+        document.getElementById("probabilities").innerHTML = probabilitiesText;
+
+        console.log("예측 값:", resultArray);
+      }
+
+      // 4️⃣ 실행 (모델 로드 → 웹캠 실행 → 예측 실행)
+      async function init() {
+        await loadModel();
+        await setupWebcam();
+        setInterval(predict, 2000); // 2초마다 예측 실행
+      }
+
+      init();
+    </script>
+  </body>
+</html>
